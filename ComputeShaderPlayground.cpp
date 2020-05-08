@@ -97,11 +97,6 @@ int main()
 			mDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 			mDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-			mRootParameter.Descriptor.ShaderRegister = 0;
-			mRootParameter.Descriptor.RegisterSpace = 0;
-			mRootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
-			mRootParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
 			mReadbackProperties = mProperties;
 			mReadbackProperties.Type = D3D12_HEAP_TYPE_READBACK;
 
@@ -116,35 +111,16 @@ int main()
 		D3D12_RESOURCE_DESC mReadbackDesc = {};
 		D3D12_HEAP_PROPERTIES mReadbackProperties = {};
 		ComPtr<ID3D12Resource> mReadbackResource;
-
-		uint32_t mRootParameterIndex = 0;
-		D3D12_ROOT_PARAMETER mRootParameter = {};
 	};
 
 	UAV uav;
 	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(float);
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
-	uav.mRootParameterIndex = 0;
-	uav.mRootParameter.Descriptor.ShaderRegister = 0;
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
 	
 	ComPtr<ID3D12RootSignature> root_signature;
-	{
-		D3D12_ROOT_PARAMETER parameters[1] = {};
-		parameters[uav.mRootParameterIndex] = uav.mRootParameter;
-
-		D3D12_ROOT_SIGNATURE_DESC desc = {};
-		desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-		desc.pParameters = &parameters[0];
-		desc.NumParameters = _countof(parameters);
-
-		ComPtr<ID3DBlob> signature_blob;
-		ComPtr<ID3DBlob> error_blob;
-		D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature_blob, &error_blob);
-
-		device->CreateRootSignature(0, signature_blob->GetBufferPointer(), signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
-	}
+	device->CreateRootSignature(0, shader_blob->GetBufferPointer(), shader_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
 
 	D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
 	pso_desc.pRootSignature = root_signature.Get();
@@ -207,8 +183,3 @@ int main()
 
 	return 0;
 }
-
-// Reference
-// - https://github.com/microsoft/DirectX-Graphics-Samples
-// - https://www.3dgep.com/learning-directx-12-1
-// - https://asawicki.info/news_1719_two_shader_compilers_of_direct3d_12
