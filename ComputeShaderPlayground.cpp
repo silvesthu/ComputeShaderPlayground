@@ -61,7 +61,7 @@ int main()
 
 	ComPtr<ID3D12Debug> d3d12_debug;
 	D3D12GetDebugInterface(IID_PPV_ARGS(&d3d12_debug));
-	d3d12_debug->EnableDebugLayer();
+	//d3d12_debug->EnableDebugLayer();
 
 	ComPtr<IDXGIFactory4> factory;
 	CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
@@ -141,36 +141,68 @@ int main()
 	ComPtr<ID3D12GraphicsCommandList> command_list;
 	device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, command_allocator.Get(), nullptr, IID_PPV_ARGS(&command_list));
 
+	DXGI_SWAP_CHAIN_DESC1 swap_chain_desc = {};
+	swap_chain_desc.BufferCount = 2;
+	swap_chain_desc.Width = 1;
+	swap_chain_desc.Height = 1;
+	swap_chain_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	swap_chain_desc.SampleDesc.Count = 1;
+	ComPtr<IDXGISwapChain1> swap_chain;
+	factory->CreateSwapChainForHwnd(command_queue.Get(), GetConsoleWindow(), &swap_chain_desc, nullptr, nullptr, &swap_chain);
+
 	//////////////////////////////////////////////////////////////////////////
 
-	command_list->SetComputeRootSignature(root_signature.Get());
-	command_list->SetComputeRootUnorderedAccessView(0, uav.mGPUResource->GetGPUVirtualAddress());
-	command_list->SetPipelineState(pso.Get());
-	command_list->Dispatch(kDispatchCount, 1, 1);
-
-	D3D12_RESOURCE_BARRIER barriers[1] = {};
-	barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barriers[0].Transition.pResource = uav.mGPUResource.Get();
-	barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-	barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-	command_list->ResourceBarrier(_countof(barriers), &barriers[0]);	
-	command_list->CopyResource(uav.mReadbackResource.Get(), uav.mGPUResource.Get());
-
-	command_list->Close();
-
-	ID3D12CommandList* command_lists[] = { command_list.Get() };
-	command_queue->ExecuteCommandLists(_countof(command_lists), command_lists);
+	uint32_t frame = 0;
 
 	ComPtr<ID3D12Fence> fence;
-	device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-	command_queue->Signal(fence.Get(), 1);
+	device->CreateFence(frame, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+
+	HANDLE handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+
+	while (true) 
+	{
+		frame++;
+
+		command_list->SetComputeRootSignature(root_signature.Get());
+		command_list->SetComputeRootUnorderedAccessView(0, uav.mGPUResource->GetGPUVirtualAddress());
+		command_list->SetPipelineState(pso.Get());
+		command_list->Dispatch(kDispatchCount, 1, 1);
+
+		D3D12_RESOURCE_BARRIER barriers[1] = {};
+		barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barriers[0].Transition.pResource = uav.mGPUResource.Get();
+		barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+		command_list->ResourceBarrier(_countof(barriers), &barriers[0]);
+
+		command_list->CopyResource(uav.mReadbackResource.Get(), uav.mGPUResource.Get());
+
+		barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barriers[0].Transition.pResource = uav.mGPUResource.Get();
+		barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+		barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		command_list->ResourceBarrier(_countof(barriers), &barriers[0]);
+
+		command_list->Close();
+
+		ID3D12CommandList* command_lists[] = { command_list.Get() };
+		command_queue->ExecuteCommandLists(_countof(command_lists), command_lists);
+		command_queue->Signal(fence.Get(), frame);
+
+		swap_chain->Present(0, 0);
+
+		fence->SetEventOnCompletion(frame, handle);
+		WaitForSingleObject(handle, INFINITE);
+
+		command_allocator->Reset();
+		command_list->Reset(command_allocator.Get(), nullptr);
+	}
 
 	//////////////////////////////////////////////////////////////////////////
-	
-	HANDLE handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-	fence->SetEventOnCompletion(1, handle);
-	WaitForSingleObject(handle, INFINITE);
 
 	float* data = nullptr;
 	D3D12_RANGE range = { 0, uav.mReadbackDesc.Width };
