@@ -8,7 +8,11 @@ void main(
 	uint3 inDispatchThreadID : SV_DispatchThreadID,
 	uint inGroupIndex : SV_GroupIndex)
 {
-	uav[inDispatchThreadID.x] = 0;
-	
-	uav[inDispatchThreadID.x] = WaveGetLaneIndex();
+	int stride = 4096 / 32;
+	int index = inDispatchThreadID.x * stride;
+	for (int i = 0; i < stride; i++)
+	{
+		uav[index] = index;
+		index++;
+	}
 }

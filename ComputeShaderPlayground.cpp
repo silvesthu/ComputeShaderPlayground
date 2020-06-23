@@ -1,4 +1,7 @@
+#define NOMINMAX
+
 #include <string>
+#include <algorithm>
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -9,7 +12,7 @@ using namespace Microsoft::WRL;
 
 int main()
 {
-	const uint32_t kGroupSize = 16;
+	const uint32_t kGroupSize = 32;
 	const uint32_t kDispatchCount = 1;
 
 	//////////////////////////////////////////////////////////////////////////
@@ -114,11 +117,31 @@ int main()
 	};
 
 	UAV uav;
-	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(float);
+	uav.mDesc.Width = std::max(kGroupSize * kDispatchCount * sizeof(float) * (UINT64)1, 4095 * (UINT64)1);
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
+	UAV uav_next;
+	uav_next.mDesc.Width = uav.mDesc.Width;
+	uav_next.mReadbackDesc.Width = uav.mDesc.Width;
+
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
+	device->CreateCommittedResource(&uav_next.mProperties, D3D12_HEAP_FLAG_NONE, &uav_next.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&uav_next.mGPUResource));
+
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
-	
+	device->CreateCommittedResource(&uav_next.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav_next.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav_next.mReadbackResource));
+
+	printf("A Address = %llx ~ %llx\n", uav.mGPUResource->GetGPUVirtualAddress(), uav.mGPUResource->GetGPUVirtualAddress() + uav.mDesc.Width);
+	printf("B Address = %llx ~ %llx\n", uav_next.mGPUResource->GetGPUVirtualAddress(), uav_next.mGPUResource->GetGPUVirtualAddress() + uav_next.mDesc.Width);
+
+	printf("---\n");
+
+	printf("A Address (Readback) = %llx ~ %llx\n", uav.mReadbackResource->GetGPUVirtualAddress(), uav.mReadbackResource->GetGPUVirtualAddress() + uav.mDesc.Width);
+	printf("B Address (Readback) = %llx ~ %llx\n", uav_next.mReadbackResource->GetGPUVirtualAddress(), uav_next.mReadbackResource->GetGPUVirtualAddress() + uav_next.mDesc.Width);
+
+	printf("---\n");
+
+	if (uav.mGPUResource->GetGPUVirtualAddress() + uav.mDesc.Width + 1 == uav_next.mGPUResource->GetGPUVirtualAddress())
+		printf("B is next to A\n");
+
 	ComPtr<ID3D12RootSignature> root_signature;
 	device->CreateRootSignature(0, shader_blob->GetBufferPointer(), shader_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
 
@@ -154,8 +177,12 @@ int main()
 	barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 	barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 	barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-	command_list->ResourceBarrier(_countof(barriers), &barriers[0]);	
+	command_list->ResourceBarrier(_countof(barriers), &barriers[0]);
 	command_list->CopyResource(uav.mReadbackResource.Get(), uav.mGPUResource.Get());
+
+	barriers[0].Transition.pResource = uav_next.mGPUResource.Get();
+	command_list->ResourceBarrier(_countof(barriers), &barriers[0]);
+	command_list->CopyResource(uav_next.mReadbackResource.Get(), uav_next.mGPUResource.Get());
 
 	command_list->Close();
 
@@ -167,19 +194,23 @@ int main()
 	command_queue->Signal(fence.Get(), 1);
 
 	//////////////////////////////////////////////////////////////////////////
-	
+
 	HANDLE handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	fence->SetEventOnCompletion(1, handle);
 	WaitForSingleObject(handle, INFINITE);
 
 	float* data = nullptr;
 	D3D12_RANGE range = { 0, uav.mReadbackDesc.Width };
-	uav.mReadbackResource->Map(0, &range, (void**)&data);
 
-	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float); i++)
-		printf("uav[%d] = %.2f\n", i, data[i]);
+	uav_next.mReadbackResource->Map(0, &range, (void**)&data);
 
-	uav.mReadbackResource->Unmap(0, nullptr);
+	printf("---\n");
+	printf("B[%d] = %.2f\n", 0, data[0]);
+	printf("---\n");
+	if (data[0] != 0)
+		printf("Shader has written to B (UAV view created based on GPUVirtualAddress of A)\n");
+
+	uav_next.mReadbackResource->Unmap(0, nullptr);
 
 	return 0;
 }
