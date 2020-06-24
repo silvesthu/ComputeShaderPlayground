@@ -66,6 +66,10 @@ int main()
 	D3D12GetDebugInterface(IID_PPV_ARGS(&d3d12_debug));
 	d3d12_debug->EnableDebugLayer();
 
+	ComPtr<ID3D12Debug1> debugController1;
+	d3d12_debug->QueryInterface(IID_PPV_ARGS(&debugController1));
+	// debugController1->SetEnableGPUBasedValidation(true);
+
 	ComPtr<IDXGIFactory4> factory;
 	CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
 
