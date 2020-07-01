@@ -171,6 +171,9 @@ int main()
 	//////////////////////////////////////////////////////////////////////////
 
 	command_list->SetComputeRootSignature(root_signature.Get());
+	// Note:
+	// GPUVirtualAddress provides no bounds check
+	// While using CreateUnorderedAccessView(D3D12_UNORDERED_ACCESS_VIEW_DESC) to setup descriptor table will let shader discard out-of-bounds access
 	command_list->SetComputeRootUnorderedAccessView(0, uav.mGPUResource->GetGPUVirtualAddress());
 	command_list->SetPipelineState(pso.Get());
 	command_list->Dispatch(kDispatchCount, 1, 1);
