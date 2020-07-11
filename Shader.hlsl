@@ -1,7 +1,8 @@
-globallycoherent RWStructuredBuffer<uint> uav : register(u0, space0);
-// RWStructuredBuffer<uint> uav : register(u0, space0); // cause TDR
+// globallycoherent
+	RWStructuredBuffer<uint> uav : register(u0, space0);
+globallycoherent RWStructuredBuffer<uint> counter : register(u1, space0);
 
-[RootSignature("RootFlags(0), UAV(u0)")]
+[RootSignature("RootFlags(0), UAV(u0), UAV(u1)")]
 [numthreads(GROUP_SIZE, 1, 1)]
 void main(
 	uint3 inGroupThreadID : SV_GroupThreadID,
@@ -15,30 +16,42 @@ void main(
 	// Sync
 	AllMemoryBarrierWithGroupSync();
 
-	// Work per group
-	if (inGroupID.x != 0)
- 	{
- 		for (int i = 0; i < 10000; i++)  // heavy-lifting
- 			uav[inDispatchThreadID.x] = uav[inDispatchThreadID.x] + i;
-
-		if (inGroupThreadID.x == 0) // first thread in group
-		{
-			uint dummy;
-			InterlockedAdd(uav[1], 1, dummy); // group counter
-		}
+	// On group 0
+	if (inGroupID.x == 0)
+	{
+		// map L1
+		uav[inDispatchThreadID.x] = inDispatchThreadID.x;
 	}
 
- 	// Sync
- 	AllMemoryBarrierWithGroupSync();
-
-	// Sync across groups
-	if (inDispatchThreadID.x == 0) // first thread in dispatch
+	// On group 1
+	if (inGroupID.x == 1)
 	{
-		int wait_counter = 0;
-		while (uav[1] < (DISPATCH_COUNT - 1))
+		for (int i = 0; i < 100000; i++) // heavy lifting
+		{
+			uint dummy;
+			InterlockedAdd(counter[1], 1, dummy);
+		}
+
+		// update uav with range used by group 0
+		uav[inDispatchThreadID.x - GROUP_SIZE] = inDispatchThreadID.x;
+		counter[0] = 1;
+	}
+
+	// Sync
+	AllMemoryBarrierWithGroupSync();
+
+	// On group 0
+	if (inGroupID.x == 0)
+	{
+		// Wait group 1
+		uint wait_counter = 0;
+		while (counter[0] != 1)
 		{
 			wait_counter++;
 		}
-		uav[2] = wait_counter;
+
+		// update uav (from stale L1 if w/o globallycoherent)
+		uav[inDispatchThreadID.x] = uav[inDispatchThreadID.x];
+		counter[1] = wait_counter;
 	}
 }

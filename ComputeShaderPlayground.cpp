@@ -10,7 +10,7 @@ using namespace Microsoft::WRL;
 int main()
 {
 	const uint32_t kGroupSize = 16;
-	const uint32_t kDispatchCount = 16;
+	const uint32_t kDispatchCount = 2;
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -118,6 +118,10 @@ int main()
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
+
+	UAV counter;
+	counter.mDesc.Width = 64 * sizeof(uint32_t);
+	device->CreateCommittedResource(&counter.mProperties, D3D12_HEAP_FLAG_NONE, &counter.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&counter.mGPUResource));
 	
 	ComPtr<ID3D12RootSignature> root_signature;
 	device->CreateRootSignature(0, shader_blob->GetBufferPointer(), shader_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
@@ -145,6 +149,7 @@ int main()
 
 	command_list->SetComputeRootSignature(root_signature.Get());
 	command_list->SetComputeRootUnorderedAccessView(0, uav.mGPUResource->GetGPUVirtualAddress());
+	command_list->SetComputeRootUnorderedAccessView(1, counter.mGPUResource->GetGPUVirtualAddress());
 	command_list->SetPipelineState(pso.Get());
 	command_list->Dispatch(kDispatchCount, 1, 1);
 
@@ -176,14 +181,14 @@ int main()
 	D3D12_RANGE range = { 0, uav.mReadbackDesc.Width };
 	uav.mReadbackResource->Map(0, &range, (void**)&data);
 
-// 	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float); i++)
-// 		printf("uav[%d] = %.2f\n", i, data[i]);
-
 	printf("uav[%d] = %d\n", 0, data[0]);
 	printf("uav[%d] = %d\n", 1, data[1]);
 	printf("uav[%d] = %d\n", 2, data[2]);
+	printf("uav[%d] = %d\n", 3, data[3]);
+	printf("uav[%d] = %d\n", 4, data[4]);
+	printf("uav[%d] = %d\n", 5, data[5]);
 
-	printf("DeviceRemovedReason = %llx\n", device->GetDeviceRemovedReason());
+	printf("DeviceRemovedReason = %x\n", device->GetDeviceRemovedReason());
 
 	uav.mReadbackResource->Unmap(0, nullptr);
 
