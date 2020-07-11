@@ -43,7 +43,7 @@ void main(
 	// On group 0
 	if (inGroupID.x == 0)
 	{
-		// Wait group 1
+		// Wait group 1 (cause TDR on HD620)
 		uint wait_counter = 0;
 		while (counter[0] != 1)
 		{
