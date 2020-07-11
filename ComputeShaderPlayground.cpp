@@ -10,7 +10,7 @@ using namespace Microsoft::WRL;
 int main()
 {
 	const uint32_t kGroupSize = 16;
-	const uint32_t kDispatchCount = 1;
+	const uint32_t kDispatchCount = 16;
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -114,7 +114,7 @@ int main()
 	};
 
 	UAV uav;
-	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(float);
+	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(uint32_t);
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
@@ -172,12 +172,18 @@ int main()
 	fence->SetEventOnCompletion(1, handle);
 	WaitForSingleObject(handle, INFINITE);
 
-	float* data = nullptr;
+	uint32_t* data = nullptr;
 	D3D12_RANGE range = { 0, uav.mReadbackDesc.Width };
 	uav.mReadbackResource->Map(0, &range, (void**)&data);
 
-	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float); i++)
-		printf("uav[%d] = %.2f\n", i, data[i]);
+// 	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float); i++)
+// 		printf("uav[%d] = %.2f\n", i, data[i]);
+
+	printf("uav[%d] = %d\n", 0, data[0]);
+	printf("uav[%d] = %d\n", 1, data[1]);
+	printf("uav[%d] = %d\n", 2, data[2]);
+
+	printf("DeviceRemovedReason = %llx\n", device->GetDeviceRemovedReason());
 
 	uav.mReadbackResource->Unmap(0, nullptr);
 
