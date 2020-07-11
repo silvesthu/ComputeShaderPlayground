@@ -9,7 +9,7 @@ using namespace Microsoft::WRL;
 
 int main()
 {
-	const uint32_t kGroupSize = 16;
+	const uint32_t kGroupSize = 1;
 	const uint32_t kDispatchCount = 2;
 
 	//////////////////////////////////////////////////////////////////////////
@@ -115,13 +115,21 @@ int main()
 
 	UAV uav;
 	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(uint32_t);
-	uav.mReadbackDesc.Width = uav.mDesc.Width;
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
-	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
+
+	UAV coherent_uav;
+	coherent_uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(uint32_t);
+	device->CreateCommittedResource(&coherent_uav.mProperties, D3D12_HEAP_FLAG_NONE, &coherent_uav.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&coherent_uav.mGPUResource));
 
 	UAV counter;
 	counter.mDesc.Width = 64 * sizeof(uint32_t);
 	device->CreateCommittedResource(&counter.mProperties, D3D12_HEAP_FLAG_NONE, &counter.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&counter.mGPUResource));
+
+	UAV output;
+	output.mDesc.Width = kGroupSize * kDispatchCount * sizeof(uint32_t);
+	output.mReadbackDesc.Width = output.mDesc.Width;
+	device->CreateCommittedResource(&output.mProperties, D3D12_HEAP_FLAG_NONE, &output.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&output.mGPUResource));
+	device->CreateCommittedResource(&output.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &output.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&output.mReadbackResource));
 	
 	ComPtr<ID3D12RootSignature> root_signature;
 	device->CreateRootSignature(0, shader_blob->GetBufferPointer(), shader_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature));
@@ -149,18 +157,20 @@ int main()
 
 	command_list->SetComputeRootSignature(root_signature.Get());
 	command_list->SetComputeRootUnorderedAccessView(0, uav.mGPUResource->GetGPUVirtualAddress());
-	command_list->SetComputeRootUnorderedAccessView(1, counter.mGPUResource->GetGPUVirtualAddress());
+	command_list->SetComputeRootUnorderedAccessView(1, coherent_uav.mGPUResource->GetGPUVirtualAddress());
+	command_list->SetComputeRootUnorderedAccessView(2, counter.mGPUResource->GetGPUVirtualAddress());
+	command_list->SetComputeRootUnorderedAccessView(3, output.mGPUResource->GetGPUVirtualAddress());
 	command_list->SetPipelineState(pso.Get());
 	command_list->Dispatch(kDispatchCount, 1, 1);
 
 	D3D12_RESOURCE_BARRIER barriers[1] = {};
 	barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barriers[0].Transition.pResource = uav.mGPUResource.Get();
+	barriers[0].Transition.pResource = output.mGPUResource.Get();
 	barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 	barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 	barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
 	command_list->ResourceBarrier(_countof(barriers), &barriers[0]);	
-	command_list->CopyResource(uav.mReadbackResource.Get(), uav.mGPUResource.Get());
+	command_list->CopyResource(output.mReadbackResource.Get(), output.mGPUResource.Get());
 
 	command_list->Close();
 
@@ -178,19 +188,13 @@ int main()
 	WaitForSingleObject(handle, INFINITE);
 
 	uint32_t* data = nullptr;
-	D3D12_RANGE range = { 0, uav.mReadbackDesc.Width };
-	uav.mReadbackResource->Map(0, &range, (void**)&data);
+	D3D12_RANGE range = { 0, output.mReadbackDesc.Width };
+	output.mReadbackResource->Map(0, &range, (void**)&data);
 
-	printf("uav[%d] = %d\n", 0, data[0]);
-	printf("uav[%d] = %d\n", 1, data[1]);
-	printf("uav[%d] = %d\n", 2, data[2]);
-	printf("uav[%d] = %d\n", 3, data[3]);
-	printf("uav[%d] = %d\n", 4, data[4]);
-	printf("uav[%d] = %d\n", 5, data[5]);
+	printf("uav output          = %d\n", data[0]);
+	printf("coherent uav output = %d\n", data[1]);
 
-	printf("DeviceRemovedReason = %x\n", device->GetDeviceRemovedReason());
-
-	uav.mReadbackResource->Unmap(0, nullptr);
+	output.mReadbackResource->Unmap(0, nullptr);
 
 	return 0;
 }
