@@ -1,4 +1,4 @@
-RWStructuredBuffer<float> uav : register(u0, space0);
+RWStructuredBuffer<float4> uav : register(u0, space0);
 
 [RootSignature("RootFlags(0), UAV(u0)")]
 [numthreads(32, 1, 1)]

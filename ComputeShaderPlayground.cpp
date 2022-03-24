@@ -114,7 +114,7 @@ int main()
 	};
 
 	UAV uav;
-	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(float);
+	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(float) * 4;
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
@@ -176,8 +176,8 @@ int main()
 	D3D12_RANGE range = { 0, uav.mReadbackDesc.Width };
 	uav.mReadbackResource->Map(0, &range, (void**)&data);
 
-	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float); i++)
-		printf("uav[%d] = %.2f\n", i, data[i]);
+	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float) / 4; i++)
+		printf("uav[%d] = %.3f, %.3f, %.3f, %.3f\n", i, data[i * 4 + 0], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]);
 
 	uav.mReadbackResource->Unmap(0, nullptr);
 
