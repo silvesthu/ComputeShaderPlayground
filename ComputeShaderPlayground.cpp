@@ -40,7 +40,7 @@ int main()
 			{ L"GROUP_SIZE", group_size_str.c_str() },
 			{ L"DISPATCH_COUNT", dispatch_count_str.c_str() },
 		};
-		HRESULT hr = compiler->Compile(source_blob.Get(), L"Shader.hlsl", L"main", L"cs_6_4", arguments, _countof(arguments), defines, _countof(defines), nullptr, &result);
+		HRESULT hr = compiler->Compile(source_blob.Get(), L"Shader.hlsl", L"main", L"cs_6_6", arguments, _countof(arguments), defines, _countof(defines), nullptr, &result);
 		if (SUCCEEDED(hr))
 			result->GetStatus(&hr);
 		bool compile_succeed = SUCCEEDED(hr);
@@ -73,7 +73,7 @@ int main()
 	adapter->GetDesc1(&adapter_desc);
 
 	ComPtr<ID3D12Device2> device;
-	D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&device));
+	D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device));
 
 	struct UAV
 	{
@@ -116,7 +116,7 @@ int main()
 	UAV uav;
 	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(float) * 4;
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
-	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
+	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
 	
 	ComPtr<ID3D12RootSignature> root_signature;
