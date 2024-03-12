@@ -20,7 +20,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Shader.hlsl" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="Shader.hlsl" />
   </ItemGroup>
 </Project>

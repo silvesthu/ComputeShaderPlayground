@@ -9,8 +9,35 @@ using namespace Microsoft::WRL;
 
 int main()
 {
-	const uint32_t kGroupSize = 16;
-	const uint32_t kDispatchCount = 1;
+	const uint32_t kGroupSize = 32;
+	const uint32_t kDispatchSize = 1;
+
+	//////////////////////////////////////////////////////////////////////////
+
+	ComPtr<ID3D12Debug> d3d12_debug;
+	D3D12GetDebugInterface(IID_PPV_ARGS(&d3d12_debug));
+	d3d12_debug->EnableDebugLayer();
+
+	ComPtr<IDXGIFactory4> factory;
+	CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+
+	ComPtr<IDXGIAdapter1> adapter;
+	factory->EnumAdapters1(0, &adapter);
+
+	DXGI_ADAPTER_DESC1 adapter_desc;
+	adapter->GetDesc1(&adapter_desc);
+
+	ComPtr<ID3D12Device2> device;
+	D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device));
+
+	D3D12_FEATURE_DATA_D3D12_OPTIONS1 options1 = {};
+	if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &options1, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS1))))
+	{
+		printf("WaveLaneCountMin = %d\n", options1.WaveLaneCountMin);
+		printf("WaveLaneCountMax = %d\n", options1.WaveLaneCountMax);
+		printf("TotalLaneCount = %d\n", options1.TotalLaneCount);
+		printf("\n");
+	}
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -30,15 +57,22 @@ int main()
 		LPCWSTR arguments[] =
 		{
 			L"-O3",
+			L"-HV 2021",
 			// L"-Zi",
 		};
 
+		printf("GROUP_SIZE = %d\n", kGroupSize);
+		printf("DISPATCH_SIZE = %d\n", kDispatchSize);
+		printf("WAVE_SIZE = %d\n", options1.WaveLaneCountMin);
+		printf("\n");
 		std::wstring group_size_str = std::to_wstring(kGroupSize);
-		std::wstring dispatch_count_str = std::to_wstring(kDispatchCount);
+		std::wstring dispatch_size_str = std::to_wstring(kDispatchSize);
+		std::wstring wave_size_str = std::to_wstring(options1.WaveLaneCountMin);
 		DxcDefine defines[] =
 		{
 			{ L"GROUP_SIZE", group_size_str.c_str() },
-			{ L"DISPATCH_COUNT", dispatch_count_str.c_str() },
+			{ L"DISPATCH_SIZE", dispatch_size_str.c_str() },
+			{ L"WAVE_SIZE", wave_size_str.c_str() },
 		};
 		HRESULT hr = compiler->Compile(source_blob.Get(), L"Shader.hlsl", L"main", L"cs_6_6", arguments, _countof(arguments), defines, _countof(defines), nullptr, &result);
 		if (SUCCEEDED(hr))
@@ -47,7 +81,7 @@ int main()
 		ComPtr<IDxcBlobEncoding> error_blob;
 		if (SUCCEEDED(result->GetErrorBuffer(&error_blob)) && error_blob)
 		{
-			printf("Shader compile %s\n\n", compile_succeed ? "succeed" : "failed");
+			printf("Shader compile %s\n", compile_succeed ? "succeed" : "failed");
 			std::string error_message((const char*)error_blob->GetBufferPointer(), error_blob->GetBufferSize());
 			printf("%s", error_message.c_str());
 			if (!compile_succeed)
@@ -58,22 +92,6 @@ int main()
 	}
 
 	//////////////////////////////////////////////////////////////////////////
-
-	ComPtr<ID3D12Debug> d3d12_debug;
-	D3D12GetDebugInterface(IID_PPV_ARGS(&d3d12_debug));
-	d3d12_debug->EnableDebugLayer();
-
-	ComPtr<IDXGIFactory4> factory;
-	CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
-
-	ComPtr<IDXGIAdapter1> adapter;
-	factory->EnumAdapters1(0, &adapter);
-
-	DXGI_ADAPTER_DESC1 adapter_desc;
-	adapter->GetDesc1(&adapter_desc);
-
-	ComPtr<ID3D12Device2> device;
-	D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device));
 
 	struct UAV
 	{
@@ -114,7 +132,7 @@ int main()
 	};
 
 	UAV uav;
-	uav.mDesc.Width = kGroupSize * kDispatchCount * sizeof(float) * 4;
+	uav.mDesc.Width = kGroupSize * kDispatchSize * sizeof(float) * 4;
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
@@ -146,7 +164,7 @@ int main()
 	command_list->SetComputeRootSignature(root_signature.Get());
 	command_list->SetComputeRootUnorderedAccessView(0, uav.mGPUResource->GetGPUVirtualAddress());
 	command_list->SetPipelineState(pso.Get());
-	command_list->Dispatch(kDispatchCount, 1, 1);
+	command_list->Dispatch(kDispatchSize, 1, 1);
 
 	D3D12_RESOURCE_BARRIER barriers[1] = {};
 	barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
