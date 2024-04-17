@@ -23,7 +23,7 @@ void main(
 	uav[inGroupIndex] = 0;
 	
 	uav[inGroupIndex] = float4(
-					WaveActiveSumUnified(WaveGetLaneIndex(), inGroupIndex),
+					WaveActiveSumUnified(inGroupIndex, inGroupIndex),
 					inGroupIndex,
 					0,
 					WAVE_OPERATION_UNIFIED_USE_NATIVE ? 1 : 0);

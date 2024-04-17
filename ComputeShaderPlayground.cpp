@@ -3,17 +3,21 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <dxcapi.h>
+#include <d3d12shader.h>
 
 #include <wrl.h>
 using namespace Microsoft::WRL;
 
 int main()
 {
-	const uint32_t kThreadGroupSizeX = 8;
-	const uint32_t kThreadGroupSizeY = 4;
-	const uint32_t kThreadGroupSizeZ = 1;
-	const uint32_t kThreadGroupSize = kThreadGroupSizeX * kThreadGroupSizeY * kThreadGroupSizeZ;
-	const uint32_t kDispatchSize = 1;
+	const uint32_t kThreadGroupSizeX			= 8;
+	const uint32_t kThreadGroupSizeY			= 4;
+	const uint32_t kThreadGroupSizeZ			= 1;
+	const uint32_t kThreadGroupSize				= kThreadGroupSizeX * kThreadGroupSizeY * kThreadGroupSizeZ;
+
+	const uint32_t kDispatchSize				= 1;
+
+	const bool kPrintDisassembly				= false;
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -34,13 +38,7 @@ int main()
 	D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device));
 
 	D3D12_FEATURE_DATA_D3D12_OPTIONS1 options1 = {};
-	if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &options1, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS1))))
-	{
-		printf("WaveLaneCountMin = %d\n", options1.WaveLaneCountMin);
-		printf("WaveLaneCountMax = %d\n", options1.WaveLaneCountMax);
-		printf("TotalLaneCount = %d\n", options1.TotalLaneCount);
-		printf("\n");
-	}
+	device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &options1, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS1));
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -67,20 +65,24 @@ int main()
 			// L"-Zi",
 		};
 
-		std::wstring thread_group_size_x_str = std::to_wstring(kThreadGroupSizeX);
-		std::wstring thread_group_size_y_str = std::to_wstring(kThreadGroupSizeY);
-		std::wstring thread_group_size_z_str = std::to_wstring(kThreadGroupSizeZ);
-		std::wstring thread_group_size_str = std::to_wstring(kThreadGroupSize);
-		std::wstring dispatch_size_str = std::to_wstring(kDispatchSize);
-		std::wstring wave_size_str = std::to_wstring(options1.WaveLaneCountMin);
+		std::wstring thread_group_size_x_str	= std::to_wstring(kThreadGroupSizeX);
+		std::wstring thread_group_size_y_str	= std::to_wstring(kThreadGroupSizeY);
+		std::wstring thread_group_size_z_str	= std::to_wstring(kThreadGroupSizeZ);
+		std::wstring thread_group_size_str		= std::to_wstring(kThreadGroupSize);
+		std::wstring wave_lane_count_min		= std::to_wstring(options1.WaveLaneCountMin);
+		std::wstring wave_lane_count_max		= std::to_wstring(options1.WaveLaneCountMax);
+		std::wstring total_lane_count			= std::to_wstring(options1.TotalLaneCount);
+		std::wstring dispatch_size_str			= std::to_wstring(kDispatchSize);
 		DxcDefine defines[] =
 		{
-			{ L"THREAD_GROUP_SIZE_X", thread_group_size_x_str.c_str() },
-			{ L"THREAD_GROUP_SIZE_Y", thread_group_size_y_str.c_str() },
-			{ L"THREAD_GROUP_SIZE_Z", thread_group_size_z_str.c_str() },
-			{ L"THREAD_GROUP_SIZE", thread_group_size_str.c_str() },
-			{ L"DISPATCH_SIZE", dispatch_size_str.c_str() },
-			{ L"WAVE_LANE_COUNT_MIN", wave_size_str.c_str() },
+			{ L"THREAD_GROUP_SIZE_X",			thread_group_size_x_str.c_str() },
+			{ L"THREAD_GROUP_SIZE_Y",			thread_group_size_y_str.c_str() },
+			{ L"THREAD_GROUP_SIZE_Z",			thread_group_size_z_str.c_str() },
+			{ L"THREAD_GROUP_SIZE",				thread_group_size_str.c_str() },
+			{ L"WAVE_LANE_COUNT_MIN",			wave_lane_count_min.c_str() },
+			{ L"WAVE_LANE_COUNT_MAX",			wave_lane_count_max.c_str() },
+			{ L"TOTAL_LANE_COUNT",				total_lane_count.c_str() },
+			{ L"DISPATCH_SIZE",					dispatch_size_str.c_str() },
 		};
 		for (auto&& define : defines)
 			printf("%ls = %ls\n", define.Name, define.Value);
@@ -95,13 +97,30 @@ int main()
 		if (SUCCEEDED(result->GetErrorBuffer(&error_blob)) && error_blob)
 		{
 			printf("Shader compile %s\n", compile_succeed ? "succeed" : "failed");
-			std::string error_message((const char*)error_blob->GetBufferPointer(), error_blob->GetBufferSize());
-			printf("%s", error_message.c_str());
+			std::string message((const char*)error_blob->GetBufferPointer(), error_blob->GetBufferSize());
+			printf("%s", message.c_str());
+			printf("\n");
 			if (!compile_succeed)
 				return 0;
 		}
 
 		result->GetResult(&shader_blob);
+
+		DxcBuffer dxc_buffer { .Ptr = shader_blob->GetBufferPointer(), .Size = shader_blob->GetBufferSize(), .Encoding = DXC_CP_ACP };
+		ComPtr<ID3D12ShaderReflection> shader_reflection;
+		utils->CreateReflection(&dxc_buffer, IID_PPV_ARGS(&shader_reflection));
+		UINT64 shader_required_flags = shader_reflection->GetRequiresFlags();
+		printf("D3D_SHADER_REQUIRES_WAVE_OPS = %d\n",			(shader_required_flags & D3D_SHADER_REQUIRES_WAVE_OPS) ? 1 : 0);
+		printf("D3D_SHADER_REQUIRES_DOUBLES = %d\n",			(shader_required_flags & D3D_SHADER_REQUIRES_DOUBLES) ? 1 : 0);
+		printf("\n");
+
+		ComPtr<IDxcBlobEncoding> disassemble_blob;
+		if (kPrintDisassembly && SUCCEEDED(compiler->Disassemble(shader_blob.Get(), &disassemble_blob)))
+		{
+			std::string message((const char*)disassemble_blob->GetBufferPointer(), disassemble_blob->GetBufferSize());
+			printf("%s", message.c_str());
+			printf("\n");
+		}
 	}
 
 	//////////////////////////////////////////////////////////////////////////
