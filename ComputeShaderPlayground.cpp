@@ -9,7 +9,10 @@ using namespace Microsoft::WRL;
 
 int main()
 {
-	const uint32_t kGroupSize = 32;
+	const uint32_t kThreadGroupSizeX = 8;
+	const uint32_t kThreadGroupSizeY = 4;
+	const uint32_t kThreadGroupSizeZ = 1;
+	const uint32_t kThreadGroupSize = kThreadGroupSizeX * kThreadGroupSizeY * kThreadGroupSizeZ;
 	const uint32_t kDispatchSize = 1;
 
 	//////////////////////////////////////////////////////////////////////////
@@ -49,6 +52,9 @@ int main()
 		ComPtr<IDxcCompiler> compiler;
 		DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
 
+		ComPtr<IDxcUtils> utils;
+		DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils));
+
 		uint32_t code_page = CP_UTF8;
 		ComPtr<IDxcBlobEncoding> source_blob;
 		library->CreateBlobFromFile(L"Shader.hlsl", &code_page, &source_blob);
@@ -61,20 +67,27 @@ int main()
 			// L"-Zi",
 		};
 
-		printf("GROUP_SIZE = %d\n", kGroupSize);
-		printf("DISPATCH_SIZE = %d\n", kDispatchSize);
-		printf("WAVE_SIZE = %d\n", options1.WaveLaneCountMin);
-		printf("\n");
-		std::wstring group_size_str = std::to_wstring(kGroupSize);
+		std::wstring thread_group_size_x_str = std::to_wstring(kThreadGroupSizeX);
+		std::wstring thread_group_size_y_str = std::to_wstring(kThreadGroupSizeY);
+		std::wstring thread_group_size_z_str = std::to_wstring(kThreadGroupSizeZ);
+		std::wstring thread_group_size_str = std::to_wstring(kThreadGroupSize);
 		std::wstring dispatch_size_str = std::to_wstring(kDispatchSize);
 		std::wstring wave_size_str = std::to_wstring(options1.WaveLaneCountMin);
 		DxcDefine defines[] =
 		{
-			{ L"GROUP_SIZE", group_size_str.c_str() },
+			{ L"THREAD_GROUP_SIZE_X", thread_group_size_x_str.c_str() },
+			{ L"THREAD_GROUP_SIZE_Y", thread_group_size_y_str.c_str() },
+			{ L"THREAD_GROUP_SIZE_Z", thread_group_size_z_str.c_str() },
+			{ L"THREAD_GROUP_SIZE", thread_group_size_str.c_str() },
 			{ L"DISPATCH_SIZE", dispatch_size_str.c_str() },
-			{ L"WAVE_SIZE", wave_size_str.c_str() },
+			{ L"WAVE_LANE_COUNT_MIN", wave_size_str.c_str() },
 		};
-		HRESULT hr = compiler->Compile(source_blob.Get(), L"Shader.hlsl", L"main", L"cs_6_6", arguments, _countof(arguments), defines, _countof(defines), nullptr, &result);
+		for (auto&& define : defines)
+			printf("%ls = %ls\n", define.Name, define.Value);
+		printf("\n");
+		ComPtr<IDxcIncludeHandler> dxc_include_handler;
+		utils->CreateDefaultIncludeHandler(&dxc_include_handler);
+		HRESULT hr = compiler->Compile(source_blob.Get(), L"Shader.hlsl", L"main", L"cs_6_6", arguments, _countof(arguments), defines, _countof(defines), dxc_include_handler.Get(), &result);
 		if (SUCCEEDED(hr))
 			result->GetStatus(&hr);
 		bool compile_succeed = SUCCEEDED(hr);
@@ -132,7 +145,7 @@ int main()
 	};
 
 	UAV uav;
-	uav.mDesc.Width = kGroupSize * kDispatchSize * sizeof(float) * 4;
+	uav.mDesc.Width = kThreadGroupSize * kDispatchSize * sizeof(float) * 4;
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));

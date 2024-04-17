@@ -24,5 +24,6 @@
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="Shader.hlsl" />
+    <CopyFileToFolders Include="WaveOperationUnified.h" />
   </ItemGroup>
 </Project>
