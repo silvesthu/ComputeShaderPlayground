@@ -8,6 +8,9 @@
 #include <wrl.h>
 using namespace Microsoft::WRL;
 
+extern "C" { __declspec(dllexport) extern const UINT			D3D12SDKVersion = 614; }
+extern "C" { __declspec(dllexport) extern const char8_t*		D3D12SDKPath = u8".\\D3D12\\"; }
+
 int main()
 {
 	const uint32_t kThreadGroupSizeX			= 8;
@@ -89,7 +92,7 @@ int main()
 		printf("\n");
 		ComPtr<IDxcIncludeHandler> dxc_include_handler;
 		utils->CreateDefaultIncludeHandler(&dxc_include_handler);
-		HRESULT hr = compiler->Compile(source_blob.Get(), L"Shader.hlsl", L"main", L"cs_6_6", arguments, _countof(arguments), defines, _countof(defines), dxc_include_handler.Get(), &result);
+		HRESULT hr = compiler->Compile(source_blob.Get(), L"Shader.hlsl", L"main", L"cs_6_7", arguments, _countof(arguments), defines, _countof(defines), dxc_include_handler.Get(), &result);
 		if (SUCCEEDED(hr))
 			result->GetStatus(&hr);
 		bool compile_succeed = SUCCEEDED(hr);
@@ -137,7 +140,7 @@ int main()
 
 			mDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 			mDesc.Alignment = 0;
-			mDesc.Width = 0;
+			mDesc.Width = 1;
 			mDesc.Height = 1;
 			mDesc.DepthOrArraySize = 1;
 			mDesc.MipLevels = 1;
