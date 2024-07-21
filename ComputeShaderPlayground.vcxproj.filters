@@ -22,6 +22,8 @@
   <ItemGroup>
     <CopyFileToFolders Include="Shader.hlsl" />
     <CopyFileToFolders Include="WaveOperationUnified.h" />
+    <CopyFileToFolders Include="ThreadSwizzle.h" />
+    <CopyFileToFolders Include="ThreadGroupSwizzle.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

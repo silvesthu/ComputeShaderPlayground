@@ -14,13 +14,22 @@ extern "C" { __declspec(dllexport) extern const char8_t*		D3D12SDKPath = u8".\\D
 int main()
 {
 	const uint32_t kThreadGroupSizeX			= 8;
-	const uint32_t kThreadGroupSizeY			= 4;
+	const uint32_t kThreadGroupSizeY			= 8;
 	const uint32_t kThreadGroupSizeZ			= 1;
 	const uint32_t kThreadGroupSize				= kThreadGroupSizeX * kThreadGroupSizeY * kThreadGroupSizeZ;
 
-	const uint32_t kDispatchSize				= 1;
+	const uint32_t kDispatchSizeX				= 4;
+	const uint32_t kDispatchSizeY				= 4;
+	const uint32_t kDispatchSizeZ				= 1;
+	const uint32_t kDispatchSize				= kDispatchSizeX * kDispatchSizeY * kDispatchSizeZ;
 
-	const bool kPrintDisassembly				= false;
+	const uint32_t kTotalSizeX					= kThreadGroupSizeX * kDispatchSizeX;
+	const uint32_t kTotalSizeY					= kThreadGroupSizeY * kDispatchSizeY;
+	const uint32_t kTotalSizeZ					= kThreadGroupSizeZ * kDispatchSizeZ;
+	const uint32_t kTotalSize					= kThreadGroupSize * kDispatchSize;
+
+	const bool kPrintDisassembly				= true;
+	const bool kPrintThreadSwizzle				= true;
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -72,20 +81,26 @@ int main()
 		std::wstring thread_group_size_y_str	= std::to_wstring(kThreadGroupSizeY);
 		std::wstring thread_group_size_z_str	= std::to_wstring(kThreadGroupSizeZ);
 		std::wstring thread_group_size_str		= std::to_wstring(kThreadGroupSize);
+		std::wstring dispatch_size_x_str		= std::to_wstring(kDispatchSizeX);
+		std::wstring dispatch_size_y_str		= std::to_wstring(kDispatchSizeY);
+		std::wstring dispatch_size_z_str		= std::to_wstring(kDispatchSizeZ);
+		std::wstring dispatch_size_str			= std::to_wstring(kDispatchSize);
 		std::wstring wave_lane_count_min		= std::to_wstring(options1.WaveLaneCountMin);
 		std::wstring wave_lane_count_max		= std::to_wstring(options1.WaveLaneCountMax);
 		std::wstring total_lane_count			= std::to_wstring(options1.TotalLaneCount);
-		std::wstring dispatch_size_str			= std::to_wstring(kDispatchSize);
 		DxcDefine defines[] =
 		{
 			{ L"THREAD_GROUP_SIZE_X",			thread_group_size_x_str.c_str() },
 			{ L"THREAD_GROUP_SIZE_Y",			thread_group_size_y_str.c_str() },
 			{ L"THREAD_GROUP_SIZE_Z",			thread_group_size_z_str.c_str() },
 			{ L"THREAD_GROUP_SIZE",				thread_group_size_str.c_str() },
+			{ L"DISPATCH_SIZE_X",				dispatch_size_x_str.c_str() },
+			{ L"DISPATCH_SIZE_Y",				dispatch_size_y_str.c_str() },
+			{ L"DISPATCH_SIZE_Z",				dispatch_size_z_str.c_str() },
+			{ L"DISPATCH_SIZE",					dispatch_size_str.c_str() },
 			{ L"WAVE_LANE_COUNT_MIN",			wave_lane_count_min.c_str() },
 			{ L"WAVE_LANE_COUNT_MAX",			wave_lane_count_max.c_str() },
 			{ L"TOTAL_LANE_COUNT",				total_lane_count.c_str() },
-			{ L"DISPATCH_SIZE",					dispatch_size_str.c_str() },
 		};
 		for (auto&& define : defines)
 			printf("%ls = %ls\n", define.Name, define.Value);
@@ -167,7 +182,7 @@ int main()
 	};
 
 	UAV uav;
-	uav.mDesc.Width = kThreadGroupSize * kDispatchSize * sizeof(float) * 4;
+	uav.mDesc.Width = kTotalSize * sizeof(float) * 4;
 	uav.mReadbackDesc.Width = uav.mDesc.Width;
 	device->CreateCommittedResource(&uav.mProperties, D3D12_HEAP_FLAG_NONE, &uav.mDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&uav.mGPUResource));
 	device->CreateCommittedResource(&uav.mReadbackProperties, D3D12_HEAP_FLAG_NONE, &uav.mReadbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&uav.mReadbackResource));
@@ -199,7 +214,7 @@ int main()
 	command_list->SetComputeRootSignature(root_signature.Get());
 	command_list->SetComputeRootUnorderedAccessView(0, uav.mGPUResource->GetGPUVirtualAddress());
 	command_list->SetPipelineState(pso.Get());
-	command_list->Dispatch(kDispatchSize, 1, 1);
+	command_list->Dispatch(kDispatchSizeX, kDispatchSizeY, kDispatchSizeZ);
 
 	D3D12_RESOURCE_BARRIER barriers[1] = {};
 	barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -231,6 +246,51 @@ int main()
 
 	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float) / 4; i++)
 		printf("uav[%d] = %.3f, %.3f, %.3f, %.3f\n", i, data[i * 4 + 0], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]);
+	printf("\n");
+
+	if (kPrintThreadSwizzle)
+	{
+		int swizzled_index[kTotalSizeX][kTotalSizeY] = { 0 };
+		for (int i = 0; i < kTotalSizeX * kTotalSizeY; i++)
+		{
+			int x = static_cast<int>(data[i * 4 + 0]);
+			int y = static_cast<int>(data[i * 4 + 1]);
+			swizzled_index[x][y] = i;
+		}
+
+		float distance = 0.0f;
+		float current_x = 0.0f;
+		float current_y = 0.0f;
+		for (int i = 1; i < kTotalSizeX * kTotalSizeY; i++)
+		{
+			for (int y = 0; y < kTotalSizeY; y++)
+				for (int x = 0; x < kTotalSizeX; x++)
+					if (swizzled_index[x][y] == i)
+					{
+						distance += sqrtf((x - current_x) * (x - current_x) + (y - current_y) * (y - current_y));
+						current_x = x * 1.0f;
+						current_y = y * 1.0f;
+						goto find_next;
+					}
+		find_next:
+			;
+		}
+
+		printf("Thread Swizzle, Pixel-to-Pixel Distance Sum = %.2f\n", distance);
+		for (int y = 0; y < kTotalSizeY; y++)
+		{
+			for (int x = 0; x < kTotalSizeX; x++)
+			{
+				printf("%*d ", 4, swizzled_index[x][y]);
+				if ((x + 1) % kThreadGroupSizeX == 0)
+					printf(" | ");
+			}
+
+			printf("\n");
+			if ((y + 1) % kThreadGroupSizeY == 0)
+				printf("\n");
+		}
+	}
 
 	uav.mReadbackResource->Unmap(0, nullptr);
 
