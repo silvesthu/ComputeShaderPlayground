@@ -13,13 +13,13 @@ extern "C" { __declspec(dllexport) extern const char8_t*		D3D12SDKPath = u8".\\D
 
 int main()
 {
-	const uint32_t kThreadGroupSizeX			= 8;
-	const uint32_t kThreadGroupSizeY			= 8;
+	const uint32_t kThreadGroupSizeX			= 32;
+	const uint32_t kThreadGroupSizeY			= 1;
 	const uint32_t kThreadGroupSizeZ			= 1;
 	const uint32_t kThreadGroupSize				= kThreadGroupSizeX * kThreadGroupSizeY * kThreadGroupSizeZ;
 
-	const uint32_t kDispatchSizeX				= 4;
-	const uint32_t kDispatchSizeY				= 4;
+	const uint32_t kDispatchSizeX				= 1;
+	const uint32_t kDispatchSizeY				= 1;
 	const uint32_t kDispatchSizeZ				= 1;
 	const uint32_t kDispatchSize				= kDispatchSizeX * kDispatchSizeY * kDispatchSizeZ;
 
@@ -29,7 +29,7 @@ int main()
 	const uint32_t kTotalSize					= kThreadGroupSize * kDispatchSize;
 
 	const bool kPrintDisassembly				= true;
-	const bool kPrintThreadSwizzle				= true;
+	const bool kPrintThreadSwizzle				= false;
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -245,7 +245,7 @@ int main()
 	uav.mReadbackResource->Map(0, &range, (void**)&data);
 
 	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float) / 4; i++)
-		printf("uav[%d] = %.3f, %.3f, %.3f, %.3f\n", i, data[i * 4 + 0], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]);
+		printf("uav[%d] = %.3f, %.3f, %.3f, 0x%08X\n", i, data[i * 4 + 0], data[i * 4 + 1], data[i * 4 + 2], *(uint32_t*)&data[i * 4 + 3]);
 	printf("\n");
 
 	if (kPrintThreadSwizzle)
