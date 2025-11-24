@@ -30,11 +30,11 @@ int main()
 
 	enum class Mode : uint32_t
 	{
-		EModeNone = 0,
+		EModeDraft = 0,
 		EModeThreadSwizzle = 1,
 		EModeWaveMatch = 2,
 	};
-	const Mode kMode							= Mode::EModeThreadSwizzle;
+	const Mode kMode							= Mode::EModeDraft;
 	const bool kPrintDisassembly				= false;
 	const bool kPrintUint						= true;
 

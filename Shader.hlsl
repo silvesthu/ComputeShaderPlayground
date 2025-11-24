@@ -10,6 +10,7 @@
 //	DISPATCH_SIZE
 //	WAVE_LANE_COUNT_MIN
 
+// [TODO] Better to use WaveGetLaneCount
 // #define WAVE_OPERATION_UNIFIED_FORCE_NATIVE
 // #define WAVE_OPERATION_UNIFIED_FORCE_LDS
 #include "WaveOperationUnified.h"
@@ -29,8 +30,6 @@ void main(
 	uint dispatch_thread_index = inGroupIndex + (inGroupID.x + inGroupID.y * DISPATCH_SIZE_X) * THREAD_GROUP_SIZE;
 	uav[dispatch_thread_index] = 0;
 	
-	// uav[inGroupIndex] = float4(WaveActiveSumUnified(inGroupIndex, inGroupIndex), inGroupIndex, 0, WAVE_OPERATION_UNIFIED_USE_NATIVE ? 1 : 0);
-
 	uint2 group_id = inGroupID.xy;
 	uint2 group_thread_id = inGroupThreadID.xy;
 	uint2 dispatch_thread_id = inDispatchThreadID.xy;
@@ -38,13 +37,7 @@ void main(
 	// Draft
 	if (MODE == 0)
 	{
-		uint a = inGroupIndex;
-		group_thread_id = ffxRemapForWaveReduction(inGroupIndex);
-
-		uav[dispatch_thread_index] = asfloat(uint4(
-			inGroupIndex,
-			group_thread_id,
-			WaveGetLaneIndex()));
+		uav[dispatch_thread_index] = asfloat(uint4(inGroupIndex, WaveGetLaneIndex(), 0, 0));
 	}
 
 	// ThreadSwizzle

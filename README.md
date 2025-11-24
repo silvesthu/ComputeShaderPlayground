@@ -2,7 +2,7 @@
 
 A minimal console application to test compute shader in DirectX 12
 
-- Compile shader with DXC (cs_6_6)
+- Compile shader with DXC (cs_6_7)
 - Print output read back from UAV
 
 ## Reference
