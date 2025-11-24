@@ -13,8 +13,8 @@ extern "C" { __declspec(dllexport) extern const char8_t*		D3D12SDKPath = u8".\\D
 
 int main()
 {
-	const uint32_t kThreadGroupSizeX			= 32;
-	const uint32_t kThreadGroupSizeY			= 1;
+	const uint32_t kThreadGroupSizeX			= 8;
+	const uint32_t kThreadGroupSizeY			= 8;
 	const uint32_t kThreadGroupSizeZ			= 1;
 	const uint32_t kThreadGroupSize				= kThreadGroupSizeX * kThreadGroupSizeY * kThreadGroupSizeZ;
 
@@ -28,8 +28,15 @@ int main()
 	const uint32_t kTotalSizeZ					= kThreadGroupSizeZ * kDispatchSizeZ;
 	const uint32_t kTotalSize					= kThreadGroupSize * kDispatchSize;
 
-	const bool kPrintDisassembly				= true;
-	const bool kPrintThreadSwizzle				= false;
+	enum class Mode : uint32_t
+	{
+		EModeNone = 0,
+		EModeThreadSwizzle = 1,
+		EModeWaveMatch = 2,
+	};
+	const Mode kMode							= Mode::EModeThreadSwizzle;
+	const bool kPrintDisassembly				= false;
+	const bool kPrintUint						= true;
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -85,6 +92,7 @@ int main()
 		std::wstring dispatch_size_y_str		= std::to_wstring(kDispatchSizeY);
 		std::wstring dispatch_size_z_str		= std::to_wstring(kDispatchSizeZ);
 		std::wstring dispatch_size_str			= std::to_wstring(kDispatchSize);
+		std::wstring mode						= std::to_wstring((uint32_t)kMode);
 		std::wstring wave_lane_count_min		= std::to_wstring(options1.WaveLaneCountMin);
 		std::wstring wave_lane_count_max		= std::to_wstring(options1.WaveLaneCountMax);
 		std::wstring total_lane_count			= std::to_wstring(options1.TotalLaneCount);
@@ -101,6 +109,8 @@ int main()
 			{ L"WAVE_LANE_COUNT_MIN",			wave_lane_count_min.c_str() },
 			{ L"WAVE_LANE_COUNT_MAX",			wave_lane_count_max.c_str() },
 			{ L"TOTAL_LANE_COUNT",				total_lane_count.c_str() },
+
+			{ L"MODE",							mode.c_str() },
 		};
 		for (auto&& define : defines)
 			printf("%ls = %ls\n", define.Name, define.Value);
@@ -130,6 +140,10 @@ int main()
 		UINT64 shader_required_flags = shader_reflection->GetRequiresFlags();
 		printf("D3D_SHADER_REQUIRES_WAVE_OPS = %d\n",			(shader_required_flags & D3D_SHADER_REQUIRES_WAVE_OPS) ? 1 : 0);
 		printf("D3D_SHADER_REQUIRES_DOUBLES = %d\n",			(shader_required_flags & D3D_SHADER_REQUIRES_DOUBLES) ? 1 : 0);
+		printf("\n");
+		D3D12_SHADER_DESC shader_desc;
+		shader_reflection->GetDesc(&shader_desc);
+		printf("Instruction Count = %d\n",						shader_desc.InstructionCount);
 		printf("\n");
 
 		ComPtr<IDxcBlobEncoding> disassemble_blob;
@@ -244,11 +258,7 @@ int main()
 	D3D12_RANGE range = { 0, uav.mReadbackDesc.Width };
 	uav.mReadbackResource->Map(0, &range, (void**)&data);
 
-	for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float) / 4; i++)
-		printf("uav[%d] = %.3f, %.3f, %.3f, 0x%08X\n", i, data[i * 4 + 0], data[i * 4 + 1], data[i * 4 + 2], *(uint32_t*)&data[i * 4 + 3]);
-	printf("\n");
-
-	if (kPrintThreadSwizzle)
+	if (kMode == Mode::EModeThreadSwizzle)
 	{
 		int swizzled_index[kTotalSizeX][kTotalSizeY] = { 0 };
 		for (int i = 0; i < kTotalSizeX * kTotalSizeY; i++)
@@ -289,6 +299,21 @@ int main()
 			printf("\n");
 			if ((y + 1) % kThreadGroupSizeY == 0)
 				printf("\n");
+		}
+	}
+	else
+	{
+		if (kPrintUint)
+		{
+			for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float) / 4; i++)
+				printf("uav[%02d] = 0x%08X, 0x%08X, 0x%08X, 0x%08X\n", i, *(uint32_t*)&data[i * 4 + 0], *(uint32_t*)&data[i * 4 + 1], *(uint32_t*)&data[i * 4 + 2], *(uint32_t*)&data[i * 4 + 3]);
+			printf("\n");
+		}
+		else
+		{
+			for (int i = 0; i < uav.mReadbackDesc.Width / sizeof(float) / 4; i++)
+				printf("uav[%002d] = %.3f, %.3f, %.3f, %.3f\n", i, data[i * 4 + 0], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]);
+			printf("\n");
 		}
 	}
 
